@@ -54,7 +54,7 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 
-import pickle
+import joblib
 
 """#### Carregando dados"""
 
@@ -93,14 +93,17 @@ df.drop('label', axis = 1).apply(scale).plot.box(figsize=(12,8))
 X = df.drop('label', axis=1)
 y = df['label']
 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+#Normalização dos dados de treino
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
+# LabelEncoder apenas para y
 le = LabelEncoder()
-y_encoded = le.fit_transform(y)
-
-# Dividir em treino e teste
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
+y_train_encoded = le.fit_transform(y_train)
+y_test_encoded = le.transform(y_test)
 
 # Contagem de classes
 class_counts = pd.Series(y_train).value_counts()
@@ -117,13 +120,13 @@ pd.DataFrame({
 
 #Modelo: Random Forest
 rf = RandomForestClassifier(random_state=42)
-rf.fit(X_train, y_train)
-y_pred_rf = rf.predict(X_test)
+rf.fit(X_train_scaled, y_train)
+y_pred_rf = rf.predict(X_test_scaled)
 
 #modelo: SVM
 svm = SVC(kernel='rbf', random_state=42)
-svm.fit(X_train, y_train)
-y_pred_svm = svm.predict(X_test)
+svm.fit(X_train_scaled, y_train)
+y_pred_svm = svm.predict(X_test_scaled)
 
 #modelo: redes neurais mlp
 mlp = MLPClassifier(hidden_layer_sizes=(64, 32),
@@ -133,14 +136,10 @@ mlp = MLPClassifier(hidden_layer_sizes=(64, 32),
                    random_state=42)
 
 # Treinar
-mlp.fit(X_train, y_train)
+mlp.fit(X_train_scaled, y_train)
 
 # Prever
-y_pred_mlp = mlp.predict(X_test)
-
-# Decodificar labels
-y_pred_mlp_labels = le.inverse_transform(y_pred_mlp)
-y_test_labels = le.inverse_transform(y_test)
+y_pred_mlp = mlp.predict(X_test_scaled)
 
 """#### Avaliação dos resultados"""
 
@@ -161,7 +160,7 @@ def get_metrics_report(y_true, y_pred):
 # Adicionando resultados de cada modelo ao dicionário
 results['Random Forest'] = get_metrics_report(y_test, y_pred_rf)
 results['SVM'] = get_metrics_report(y_test, y_pred_svm)
-results['MLP'] = get_metrics_report(y_test_labels, y_pred_mlp_labels)
+results['MLP'] = get_metrics_report(y_test, y_pred_mlp)
 
 # Criar DataFrame comparativo
 df_comparativo = pd.DataFrame(results).T
@@ -182,6 +181,19 @@ pipeline = Pipeline([
 pipeline.fit(X_train, y_train)
 
 #Salvando a pipeline
-with open('crop_pipeline.pkl', 'wb') as f:
-    pickle.dump(pipeline, f)
+joblib.dump(pipeline, 'crop_recommendation_pipeline.joblib')
+joblib.dump(le, 'label_encoder.joblib')
+
+import joblib
+
+# Carregar pipeline e encoder
+pipeline = joblib.load('crop_recommendation_pipeline.joblib')
+le = joblib.load('label_encoder.joblib')
+
+# Nova amostra (N, P, K, temperature, humidity, ph, rainfall)
+new_sample = [[90, 42, 43, 20.8, 82, 6.5, 203]]  # Valores de exemplo
+
+# Fazer predição
+predicted_class = pipeline.predict(new_sample)
+print(f"Recomendação: {predicted_class}")
 
